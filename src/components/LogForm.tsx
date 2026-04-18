@@ -155,6 +155,7 @@ export default function LogForm({ date }: Props) {
   }, []);
 
   const save = async () => {
+    if (saving) return; // prevent double-click
     setSaving(true);
     setSaveStatus("saving");
     try {
@@ -174,34 +175,34 @@ export default function LogForm({ date }: Props) {
           subLocations: a.subLocations || [],
           severity: a.severity,
           symptoms: a.symptoms || [],
-          oozing: a.oozing,
-          scaling: a.scaling,
-          redness: a.redness,
-          swelling: a.swelling,
+          oozing: a.oozing || false,
+          scaling: a.scaling || false,
+          redness: a.redness || false,
+          swelling: a.swelling || false,
           notes: a.notes || null,
         })),
         meds: meds.map((m) => ({
-          productName: m.productName,
-          type: m.type,
-          bodyZones: m.bodyZones,
-          timesApplied: m.timesApplied,
+          productName: m.productName || "未命名",
+          type: m.type || "cream",
+          bodyZones: m.bodyZones || [],
+          timesApplied: m.timesApplied || 1,
           amount: m.amount || null,
           notes: m.notes || null,
         })),
-        foods: foods.filter((f) => f.items.length > 0).map((f) => ({
+        foods: foods.filter((f) => f.items && f.items.length > 0).map((f) => ({
           mealType: f.mealType,
           items: f.items,
-          suspectTrigger: f.suspectTrigger,
+          suspectTrigger: f.suspectTrigger || false,
           notes: f.notes || null,
         })),
         triggerList: triggerList.map((t) => ({
           triggerType: t.triggerType,
           description: t.description || null,
-          severity: t.severity,
+          severity: t.severity || 3,
         })),
       };
 
-      console.log("[LogForm] Saving payload:", JSON.stringify(payload).slice(0, 500));
+      console.log("[LogForm] Saving payload:", JSON.stringify(payload).slice(0, 1000));
 
       const res = await fetch("/api/logs", {
         method: "POST",
@@ -210,23 +211,26 @@ export default function LogForm({ date }: Props) {
       });
 
       const data = await res.json();
-      console.log("[LogForm] Save response:", res.status, data);
+      console.log("[LogForm] Save response:", res.status, JSON.stringify(data));
 
       if (res.ok && data.success) {
         setSaveStatus("success");
         setHasChanges(false);
+        // Use window.location for a hard redirect to avoid Next.js router issues
         setTimeout(() => {
-          router.push("/timeline");
-        }, 1200);
+          window.location.href = "/timeline";
+        }, 1000);
       } else {
-        console.error("[LogForm] Save failed:", data);
+        console.error("[LogForm] Save failed:", res.status, data);
         setSaveStatus("error");
-        setTimeout(() => setSaveStatus("idle"), 4000);
+        alert("儲存失敗：" + (data.error || JSON.stringify(data)));
+        setTimeout(() => setSaveStatus("idle"), 5000);
       }
     } catch (err) {
       console.error("[LogForm] Save error:", err);
       setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 4000);
+      alert("網絡錯誤：" + String(err));
+      setTimeout(() => setSaveStatus("idle"), 5000);
     } finally {
       setSaving(false);
     }
