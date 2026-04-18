@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { BODY_ZONES, SUB_LOCATIONS, SYMPTOM_OPTIONS, type SymptomId } from "@/lib/body-data";
+import { HandPalmDiagram, HandBackDiagram, FaceDiagram, FootSoleDiagram } from "@/components/BodyDiagrams";
 
 export interface AffectedAreaData {
   bodyZone: string;
   subLocations: string[];
   severity: number;
   symptoms: string[];
-  // Legacy compat
   oozing: boolean;
   scaling: boolean;
   redness: boolean;
@@ -31,6 +31,12 @@ function makeDefault(zone: string): AffectedAreaData {
     notes: "",
   };
 }
+
+const symptomCategories = [
+  { label: "常見症狀", ids: ["redness", "oozing", "scaling", "swelling", "blisters"] as SymptomId[] },
+  { label: "皮膚質感", ids: ["dryness", "cracking", "thickening", "crusting"] as SymptomId[] },
+  { label: "嚴重症狀", ids: ["hyperpigmentation", "bleeding"] as SymptomId[] },
+];
 
 export default function BodyZonePicker({ areas, onChange }: Props) {
   const [expandedZone, setExpandedZone] = useState<string | null>(null);
@@ -67,15 +73,13 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
     const next = current.includes(symptomId)
       ? current.filter((s) => s !== symptomId)
       : [...current, symptomId];
-    // Also update legacy booleans for backward compat
-    const patch: Partial<AffectedAreaData> = {
+    updateArea(zoneId, {
       symptoms: next,
       oozing: next.includes("oozing"),
       scaling: next.includes("scaling"),
       redness: next.includes("redness"),
       swelling: next.includes("swelling"),
-    };
-    updateArea(zoneId, patch);
+    });
   };
 
   const selectAllSubs = (zoneId: string) => {
@@ -89,12 +93,40 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
 
   const selectedZones = new Set(areas.map((a) => a.bodyZone));
 
-  // Group symptoms by category
-  const symptomCategories = [
-    { label: "常見症狀", ids: ["redness", "oozing", "scaling", "swelling", "blisters"] as SymptomId[] },
-    { label: "皮膚質感", ids: ["dryness", "cracking", "thickening", "crusting"] as SymptomId[] },
-    { label: "嚴重症狀", ids: ["hyperpigmentation", "bleeding"] as SymptomId[] },
-  ];
+  // Get the right diagram for a zone
+  const getDiagram = (zoneId: string, selected: string[], onToggle: (id: string) => void) => {
+    switch (zoneId) {
+      case "left_hand":
+      case "right_hand":
+        return (
+          <div className="flex gap-2 justify-center">
+            <div className="text-center">
+              <p className="text-[10px] text-gray-400 mb-1">手板</p>
+              <HandPalmDiagram selected={selected} onToggle={onToggle} />
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-gray-400 mb-1">手背</p>
+              <HandBackDiagram selected={selected} onToggle={onToggle} />
+            </div>
+          </div>
+        );
+      case "left_foot":
+      case "right_foot":
+        return (
+          <div className="text-center">
+            <FootSoleDiagram selected={selected} onToggle={onToggle} />
+          </div>
+        );
+      case "face":
+        return (
+          <div className="text-center">
+            <FaceDiagram selected={selected} onToggle={onToggle} />
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -136,10 +168,10 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
         const subs = SUB_LOCATIONS[area.bodyZone] || [];
         const isExpanded = expandedZone === area.bodyZone;
         const areaSymptoms = area.symptoms || [];
+        const hasDiagram = ["left_hand", "right_hand", "left_foot", "right_foot", "face"].includes(area.bodyZone);
 
         return (
           <div key={area.bodyZone} className="bg-indigo-50/80 rounded-2xl border border-indigo-100 overflow-hidden">
-            {/* Header — always visible */}
             <button
               type="button"
               onClick={() => setExpandedZone(isExpanded ? null : area.bodyZone)}
@@ -168,48 +200,44 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
               </div>
             </button>
 
-            {/* Expanded Detail */}
             {isExpanded && (
               <div className="px-4 pb-4 space-y-4">
-                {/* Severity slider */}
+                {/* Severity */}
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-xs font-medium text-gray-600">嚴重程度</span>
                     <span className="text-lg font-black text-indigo-600">{area.severity}/10</span>
                   </div>
                   <input
-                    type="range"
-                    min={1}
-                    max={10}
-                    value={area.severity}
+                    type="range" min={1} max={10} value={area.severity}
                     onChange={(e) => updateArea(area.bodyZone, { severity: parseInt(e.target.value) })}
                     className="w-full h-2.5 rounded-full appearance-none cursor-pointer accent-indigo-600"
-                    style={{
-                      background: `linear-gradient(to right, #818cf8 ${(area.severity / 10) * 100}%, #e0e7ff ${(area.severity / 10) * 100}%)`,
-                    }}
+                    style={{ background: `linear-gradient(to right, #818cf8 ${(area.severity / 10) * 100}%, #e0e7ff ${(area.severity / 10) * 100}%)` }}
                   />
                 </div>
 
-                {/* Sub-locations */}
-                {subs.length > 0 && (
+                {/* Interactive Diagram or Sub-location buttons */}
+                {hasDiagram ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-gray-700">📍 撳圖選擇具體位置</span>
+                      <button type="button" onClick={() => clearAllSubs(area.bodyZone)} className="text-[10px] text-gray-400 hover:underline">清除</button>
+                    </div>
+                    {getDiagram(area.bodyZone, area.subLocations || [], (subId) => toggleSubLocation(area.bodyZone, subId))}
+                    {/* Show selected count */}
+                    {(area.subLocations?.length || 0) > 0 && (
+                      <p className="text-center text-xs text-indigo-600 font-medium">
+                        已選 {area.subLocations.length} 個位置
+                      </p>
+                    )}
+                  </div>
+                ) : subs.length > 0 ? (
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-semibold text-gray-700">📍 具體位置</span>
                       <div className="flex gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => selectAllSubs(area.bodyZone)}
-                          className="text-[10px] text-indigo-600 font-medium hover:underline"
-                        >
-                          全選
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => clearAllSubs(area.bodyZone)}
-                          className="text-[10px] text-gray-400 font-medium hover:underline"
-                        >
-                          清除
-                        </button>
+                        <button type="button" onClick={() => selectAllSubs(area.bodyZone)} className="text-[10px] text-indigo-600 font-medium hover:underline">全選</button>
+                        <button type="button" onClick={() => clearAllSubs(area.bodyZone)} className="text-[10px] text-gray-400 font-medium hover:underline">清除</button>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -217,13 +245,10 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
                         const isSelected = (area.subLocations || []).includes(sub.id);
                         return (
                           <button
-                            key={sub.id}
-                            type="button"
+                            key={sub.id} type="button"
                             onClick={() => toggleSubLocation(area.bodyZone, sub.id)}
                             className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95 ${
-                              isSelected
-                                ? "bg-indigo-600 text-white shadow-sm"
-                                : "bg-white text-gray-500 border border-gray-200 hover:border-indigo-300"
+                              isSelected ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200 hover:border-indigo-300"
                             }`}
                           >
                             {sub.emoji} {sub.label}
@@ -232,9 +257,9 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
                       })}
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                {/* Symptoms — grouped by category */}
+                {/* Symptoms */}
                 <div className="space-y-3">
                   <span className="text-xs font-semibold text-gray-700">🔬 症狀</span>
                   {symptomCategories.map((cat) => {
@@ -245,14 +270,11 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
                         <div className="flex flex-wrap gap-1.5">
                           {catSymptoms.map((symptom) => (
                             <button
-                              key={symptom.id}
-                              type="button"
+                              key={symptom.id} type="button"
                               onClick={() => toggleSymptom(area.bodyZone, symptom.id)}
                               className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all active:scale-95 ${
                                 areaSymptoms.includes(symptom.id)
-                                  ? symptom.category === "severe"
-                                    ? "bg-red-500 text-white shadow-sm"
-                                    : "bg-indigo-500 text-white shadow-sm"
+                                  ? symptom.category === "severe" ? "bg-red-500 text-white shadow-sm" : "bg-indigo-500 text-white shadow-sm"
                                   : "bg-white text-gray-400 border border-gray-200 hover:border-gray-300"
                               }`}
                             >
@@ -267,9 +289,7 @@ export default function BodyZonePicker({ areas, onChange }: Props) {
 
                 {/* Notes */}
                 <input
-                  type="text"
-                  placeholder="備註（選填）"
-                  value={area.notes}
+                  type="text" placeholder="備註（選填）" value={area.notes}
                   onChange={(e) => updateArea(area.bodyZone, { notes: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border border-indigo-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 />
