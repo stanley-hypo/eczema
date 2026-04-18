@@ -63,11 +63,13 @@ export default function LogForm({ date }: Props) {
             setAreas(
               data.areas.map((a: Record<string, unknown>) => ({
                 bodyZone: a.bodyZone as string,
+                subLocations: (a.subLocations as string[]) || [],
                 severity: a.severity as number,
-                oozing: a.oozing as boolean,
-                scaling: a.scaling as boolean,
-                redness: a.redness as boolean,
-                swelling: a.swelling as boolean,
+                symptoms: (a.symptoms as string[]) || [],
+                oozing: (a.oozing as boolean) ?? false,
+                scaling: (a.scaling as boolean) ?? false,
+                redness: (a.redness as boolean) ?? false,
+                swelling: (a.swelling as boolean) ?? false,
                 notes: (a.notes as string) || "",
               }))
             );
@@ -101,7 +103,9 @@ export default function LogForm({ date }: Props) {
               setAreas(
                 mostRecent.areas.map((a: Record<string, unknown>) => ({
                   bodyZone: a.bodyZone as string,
-                  severity: 5, // reset severity to middle
+                  subLocations: (a.subLocations as string[]) || [],
+                  severity: 5,
+                  symptoms: [],
                   oozing: false,
                   scaling: false,
                   redness: false,
@@ -167,7 +171,9 @@ export default function LogForm({ date }: Props) {
         weatherDesc: weather?.weather_code?.toString() ?? null,
         areas: areas.map((a) => ({
           bodyZone: a.bodyZone,
+          subLocations: a.subLocations || [],
           severity: a.severity,
+          symptoms: a.symptoms || [],
           oozing: a.oozing,
           scaling: a.scaling,
           redness: a.redness,

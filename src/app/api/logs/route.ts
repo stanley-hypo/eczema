@@ -142,11 +142,13 @@ export async function POST(req: NextRequest) {
         areas.map((a: Record<string, unknown>) => ({
           logId,
           bodyZone: (a.bodyZone as string) || "other",
+          subLocations: (a.subLocations as string[]) || [],
           severity: (a.severity as number) || 5,
-          oozing: (a.oozing as boolean) ?? false,
-          scaling: (a.scaling as boolean) ?? false,
-          redness: (a.redness as boolean) ?? false,
-          swelling: (a.swelling as boolean) ?? false,
+          symptoms: (a.symptoms as string[]) || [],
+          oozing: (a.symptoms as string[])?.includes("oozing") ?? (a.oozing as boolean) ?? false,
+          scaling: (a.symptoms as string[])?.includes("scaling") ?? (a.scaling as boolean) ?? false,
+          redness: (a.symptoms as string[])?.includes("redness") ?? (a.redness as boolean) ?? false,
+          swelling: (a.symptoms as string[])?.includes("swelling") ?? (a.swelling as boolean) ?? false,
           photoUrl: (a.photoUrl as string) ?? null,
           notes: (a.notes as string) ?? null,
         }))

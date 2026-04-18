@@ -17,13 +17,12 @@ export const dailyLogs = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     logDate: date("log_date").notNull(),
-    overallSeverity: integer("overall_severity"), // 1-10
-    itchLevel: integer("itch_level"), // 1-10
-    sleepQuality: integer("sleep_quality"), // 1-5
-    stressLevel: integer("stress_level"), // 1-5
+    overallSeverity: integer("overall_severity"),
+    itchLevel: integer("itch_level"),
+    sleepQuality: integer("sleep_quality"),
+    stressLevel: integer("stress_level"),
     mood: varchar("mood", { length: 20 }),
     notes: text("notes"),
-    // Weather (auto-fetched)
     weatherTemp: integer("weather_temp"),
     weatherHumidity: integer("weather_humidity"),
     weatherDesc: varchar("weather_desc", { length: 100 }),
@@ -35,14 +34,18 @@ export const dailyLogs = pgTable(
   ]
 );
 
-// ── Affected Areas ──
+// ── Affected Areas (with sub-locations + expanded symptoms) ──
 export const affectedAreas = pgTable("affected_areas", {
   id: uuid("id").defaultRandom().primaryKey(),
   logId: uuid("log_id")
     .references(() => dailyLogs.id, { onDelete: "cascade" })
     .notNull(),
-  bodyZone: varchar("body_zone", { length: 50 }).notNull(), // e.g. face, neck, arms, legs, hands, torso, back
-  severity: integer("severity").notNull(), // 1-10
+  bodyZone: varchar("body_zone", { length: 50 }).notNull(),
+  subLocations: jsonb("sub_locations").$type<string[]>().default([]),
+  severity: integer("severity").notNull(),
+  // Expanded symptoms stored as JSON array of symptom IDs
+  symptoms: jsonb("symptoms").$type<string[]>().default([]),
+  // Keep legacy boolean fields for backward compat
   oozing: boolean("oozing").default(false),
   scaling: boolean("scaling").default(false),
   redness: boolean("redness").default(false),
@@ -51,17 +54,17 @@ export const affectedAreas = pgTable("affected_areas", {
   notes: text("notes"),
 });
 
-// ── Medications (topical/oral) ──
+// ── Medications ──
 export const medications = pgTable("medications", {
   id: uuid("id").defaultRandom().primaryKey(),
   logId: uuid("log_id")
     .references(() => dailyLogs.id, { onDelete: "cascade" })
     .notNull(),
   productName: varchar("product_name", { length: 200 }).notNull(),
-  type: varchar("type", { length: 20 }).notNull(), // cream, ointment, oral, lotion, other
+  type: varchar("type", { length: 20 }).notNull(),
   bodyZones: jsonb("body_zones").$type<string[]>().default([]),
   timesApplied: integer("times_applied").default(1),
-  amount: varchar("amount", { length: 50 }), // e.g. "thin layer", "pea-sized"
+  amount: varchar("amount", { length: 50 }),
   notes: text("notes"),
 });
 
@@ -71,22 +74,22 @@ export const foodEntries = pgTable("food_entries", {
   logId: uuid("log_id")
     .references(() => dailyLogs.id, { onDelete: "cascade" })
     .notNull(),
-  mealType: varchar("meal_type", { length: 20 }).notNull(), // breakfast, lunch, dinner, snack
+  mealType: varchar("meal_type", { length: 20 }).notNull(),
   items: jsonb("items").$type<string[]>().notNull(),
   suspectTrigger: boolean("suspect_trigger").default(false),
   photoUrl: text("photo_url"),
   notes: text("notes"),
 });
 
-// ── Triggers (environmental/lifestyle) ──
+// ── Triggers ──
 export const triggers = pgTable("triggers", {
   id: uuid("id").defaultRandom().primaryKey(),
   logId: uuid("log_id")
     .references(() => dailyLogs.id, { onDelete: "cascade" })
     .notNull(),
-  triggerType: varchar("trigger_type", { length: 50 }).notNull(), // sweat, fabric, detergent, pet, dust, pollen, other
+  triggerType: varchar("trigger_type", { length: 50 }).notNull(),
   description: text("description"),
-  severity: integer("severity"), // 1-5 how much they think it affected
+  severity: integer("severity"),
 });
 
 // Types
