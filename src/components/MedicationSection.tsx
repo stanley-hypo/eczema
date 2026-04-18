@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
+
 export interface MedicationData {
   productName: string;
   type: string;
@@ -15,11 +17,11 @@ interface Props {
 }
 
 const MED_TYPES = [
-  { value: "cream", label: "🧴 藥膏", color: "bg-purple-50 border-purple-200" },
-  { value: "ointment", label: "💊 軟膏", color: "bg-blue-50 border-blue-200" },
-  { value: "lotion", label: "🫧 乳液", color: "bg-cyan-50 border-cyan-200" },
-  { value: "oral", label: "💊 口服藥", color: "bg-orange-50 border-orange-200" },
-  { value: "other", label: "❓ 其他", color: "bg-gray-50 border-gray-200" },
+  { value: "cream", label: "🧴 藥膏" },
+  { value: "ointment", label: "💊 軟膏" },
+  { value: "lotion", label: "🫧 乳液" },
+  { value: "oral", label: "💊 口服藥" },
+  { value: "other", label: "❓ 其他" },
 ];
 
 function makeDefault(): MedicationData {
@@ -27,10 +29,29 @@ function makeDefault(): MedicationData {
 }
 
 export default function MedicationSection({ medications, onChange }: Props) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState<number | null>(null); // index
+  const inputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    fetch("/api/suggestions?type=medication")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.medications) setSuggestions(data.medications);
+      })
+      .catch(() => {});
+  }, []);
+
   const addMed = () => onChange([...medications, makeDefault()]);
   const removeMed = (idx: number) => onChange(medications.filter((_, i) => i !== idx));
   const updateMed = (idx: number, patch: Partial<MedicationData>) =>
     onChange(medications.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+
+  const filteredSuggestions = (idx: number) => {
+    const input = medications[idx]?.productName?.toLowerCase() || "";
+    if (!input) return suggestions.slice(0, 8);
+    return suggestions.filter((s) => s.toLowerCase().includes(input)).slice(0, 8);
+  };
 
   return (
     <div className="space-y-4">
@@ -63,14 +84,40 @@ export default function MedicationSection({ medications, onChange }: Props) {
             ✕
           </button>
 
-          <div className="grid grid-cols-2 gap-2">
+          {/* Product name with autocomplete */}
+          <div className="relative">
             <input
+              ref={(el) => { inputRefs.current[idx] = el; }}
               type="text"
-              placeholder="產品名稱"
+              placeholder="產品名稱（開始輸入或揀歷史記錄）"
               value={med.productName}
               onChange={(e) => updateMed(idx, { productName: e.target.value })}
-              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300"
+              onFocus={() => setShowSuggestions(idx)}
+              onBlur={() => setTimeout(() => setShowSuggestions(null), 200)}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-300"
             />
+            {showSuggestions === idx && filteredSuggestions(idx).length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-10 max-h-40 overflow-y-auto">
+                {filteredSuggestions(idx).map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      updateMed(idx, { productName: suggestion });
+                      setShowSuggestions(null);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-purple-50 transition-colors flex items-center gap-2"
+                  >
+                    <span className="text-purple-400">💊</span>
+                    <span className="text-gray-700">{suggestion}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
             <select
               value={med.type}
               onChange={(e) => updateMed(idx, { type: e.target.value })}
@@ -80,15 +127,12 @@ export default function MedicationSection({ medications, onChange }: Props) {
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-gray-500 font-medium whitespace-nowrap">塗抹次數</label>
             <div className="flex items-center gap-1">
+              <label className="text-xs text-gray-500 font-medium">次數</label>
               <button
                 type="button"
                 onClick={() => updateMed(idx, { timesApplied: Math.max(1, med.timesApplied - 1) })}
-                className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 active:scale-90 transition-all text-sm font-bold"
+                className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 active:scale-90 text-sm font-bold"
               >
                 −
               </button>
@@ -96,25 +140,18 @@ export default function MedicationSection({ medications, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => updateMed(idx, { timesApplied: med.timesApplied + 1 })}
-                className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 active:scale-90 transition-all text-sm font-bold"
+                className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 active:scale-90 text-sm font-bold"
               >
                 +
               </button>
             </div>
-            <input
-              type="text"
-              placeholder="份量（例如：薄薄一層）"
-              value={med.amount}
-              onChange={(e) => updateMed(idx, { amount: e.target.value })}
-              className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
-            />
           </div>
 
           <input
             type="text"
-            placeholder="備註（選填）"
-            value={med.notes}
-            onChange={(e) => updateMed(idx, { notes: e.target.value })}
+            placeholder="份量（例如：薄薄一層）"
+            value={med.amount}
+            onChange={(e) => updateMed(idx, { amount: e.target.value })}
             className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
           />
         </div>

@@ -44,12 +44,16 @@ export default function LogForm({ date }: Props) {
 
   const markChanged = useCallback(() => setHasChanges(true), []);
 
-  // Load existing log
+  // Load existing log or auto-fill from most recent
   useEffect(() => {
-    fetch(`/api/logs/${date}`)
-      .then((r) => r.json())
-      .then((data) => {
+    const loadData = async () => {
+      try {
+        // First try loading today's existing log
+        const res = await fetch(`/api/logs/${date}`);
+        const data = await res.json();
+
         if (data && data.id) {
+          // Existing log found — load it
           setOverallSeverity(data.overallSeverity);
           setItchLevel(data.itchLevel);
           setSleepQuality(data.sleepQuality);
@@ -67,13 +71,75 @@ export default function LogForm({ date }: Props) {
                 notes: (a.notes as string) || "",
               }))
             );
-          if (data.medications?.length) setMeds(data.medications);
+          if (data.medications?.length) {
+            setMeds(
+              data.medications.map((m: Record<string, unknown>) => ({
+                productName: (m.productName as string) || "",
+                type: (m.type as string) || "cream",
+                bodyZones: (m.bodyZones as string[]) || [],
+                timesApplied: (m.timesApplied as number) ?? 1,
+                amount: (m.amount as string) || "",
+                notes: (m.notes as string) || "",
+              }))
+            );
+          }
           if (data.foods?.length) setFoods(data.foods);
           if (data.triggers?.length) setTriggerList(data.triggers);
+          setLoaded(true);
+          return;
         }
+
+        // No existing log — auto-fill from most recent log
+        const recentRes = await fetch("/api/logs?nested=true&limit=5");
+        const recentLogs = await recentRes.json();
+
+        if (Array.isArray(recentLogs) && recentLogs.length > 0) {
+          const mostRecent = recentLogs.find((l: Record<string, unknown>) => (l.logDate as string) !== date);
+          if (mostRecent) {
+            // Auto-fill body zones and medications from most recent
+            if (mostRecent.areas?.length) {
+              setAreas(
+                mostRecent.areas.map((a: Record<string, unknown>) => ({
+                  bodyZone: a.bodyZone as string,
+                  severity: 5, // reset severity to middle
+                  oozing: false,
+                  scaling: false,
+                  redness: false,
+                  swelling: false,
+                  notes: "",
+                }))
+              );
+            }
+            if (mostRecent.medications?.length) {
+              setMeds(
+                mostRecent.medications.map((m: Record<string, unknown>) => ({
+                  productName: (m.productName as string) || "",
+                  type: (m.type as string) || "cream",
+                  bodyZones: (m.bodyZones as string[]) || [],
+                  timesApplied: 1, // reset
+                  amount: (m.amount as string) || "",
+                  notes: "",
+                }))
+              );
+            }
+            if (mostRecent.triggers?.length) {
+              setTriggerList(
+                mostRecent.triggers.map((t: Record<string, unknown>) => ({
+                  triggerType: (t.triggerType as string) || "",
+                  description: "",
+                  severity: 3,
+                }))
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load data:", err);
+      } finally {
         setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
+      }
+    };
+    loadData();
   }, [date]);
 
   // Auto-fetch weather
@@ -88,41 +154,73 @@ export default function LogForm({ date }: Props) {
     setSaving(true);
     setSaveStatus("saving");
     try {
+      const payload = {
+        logDate: date,
+        overallSeverity,
+        itchLevel,
+        sleepQuality,
+        stressLevel,
+        mood: null,
+        notes,
+        weatherTemp: weather?.temperature_2m ?? null,
+        weatherHumidity: weather?.relative_humidity_2m ?? null,
+        weatherDesc: weather?.weather_code?.toString() ?? null,
+        areas: areas.map((a) => ({
+          bodyZone: a.bodyZone,
+          severity: a.severity,
+          oozing: a.oozing,
+          scaling: a.scaling,
+          redness: a.redness,
+          swelling: a.swelling,
+          notes: a.notes || null,
+        })),
+        meds: meds.map((m) => ({
+          productName: m.productName,
+          type: m.type,
+          bodyZones: m.bodyZones,
+          timesApplied: m.timesApplied,
+          amount: m.amount || null,
+          notes: m.notes || null,
+        })),
+        foods: foods.filter((f) => f.items.length > 0).map((f) => ({
+          mealType: f.mealType,
+          items: f.items,
+          suspectTrigger: f.suspectTrigger,
+          notes: f.notes || null,
+        })),
+        triggerList: triggerList.map((t) => ({
+          triggerType: t.triggerType,
+          description: t.description || null,
+          severity: t.severity,
+        })),
+      };
+
+      console.log("[LogForm] Saving payload:", JSON.stringify(payload).slice(0, 500));
+
       const res = await fetch("/api/logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          logDate: date,
-          overallSeverity,
-          itchLevel,
-          sleepQuality,
-          stressLevel,
-          mood: null,
-          notes,
-          weatherTemp: weather?.temperature_2m ?? null,
-          weatherHumidity: weather?.relative_humidity_2m ?? null,
-          weatherDesc: weather?.weather_code?.toString() ?? null,
-          areas,
-          meds,
-          foods,
-          triggerList,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
+      const data = await res.json();
+      console.log("[LogForm] Save response:", res.status, data);
+
+      if (res.ok && data.success) {
         setSaveStatus("success");
         setHasChanges(false);
-        // Show success for 1.5s then navigate
         setTimeout(() => {
           router.push("/timeline");
         }, 1200);
       } else {
+        console.error("[LogForm] Save failed:", data);
         setSaveStatus("error");
-        setTimeout(() => setSaveStatus("idle"), 3000);
+        setTimeout(() => setSaveStatus("idle"), 4000);
       }
-    } catch {
+    } catch (err) {
+      console.error("[LogForm] Save error:", err);
       setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
+      setTimeout(() => setSaveStatus("idle"), 4000);
     } finally {
       setSaving(false);
     }
@@ -224,6 +322,16 @@ export default function LogForm({ date }: Props) {
           <div className="bg-red-500 text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-2 font-medium">
             ❌ 儲存失敗，請重試
           </div>
+        </div>
+      )}
+
+      {/* Auto-fill notice */}
+      {loaded && (areas.length > 0 || meds.length > 0) && (
+        <div className="mx-4 mt-3 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 flex items-center gap-2">
+          <span className="text-sm">📋</span>
+          <p className="text-xs text-indigo-600">
+            已自動填入上次嘅患處同藥物，修改嚴重程度即可儲存
+          </p>
         </div>
       )}
 
