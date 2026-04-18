@@ -233,20 +233,21 @@ export default function LogForm({ date }: Props) {
       if (res.ok && data.success) {
         setSaveStatus("success");
         setHasChanges(false);
-        // Use window.location for a hard redirect to avoid Next.js router issues
         setTimeout(() => {
           window.location.href = "/timeline";
         }, 1000);
       } else {
-        console.error("[LogForm] Save failed:", res.status, data);
+        console.error("[LogForm] Save failed:", res.status, JSON.stringify(data));
         setSaveStatus("error");
-        alert("儲存失敗：" + (data.error || JSON.stringify(data)));
+        // Show FULL error details
+        const errMsg = data.details || data.error || JSON.stringify(data);
+        alert("儲存失敗:\n" + errMsg + "\n\nStatus: " + res.status);
         setTimeout(() => setSaveStatus("idle"), 5000);
       }
     } catch (err) {
       console.error("[LogForm] Save error:", err);
       setSaveStatus("error");
-      alert("網絡錯誤：" + String(err));
+      alert("網絡錯誤：" + (err instanceof Error ? err.message : String(err)));
       setTimeout(() => setSaveStatus("idle"), 5000);
     } finally {
       setSaving(false);

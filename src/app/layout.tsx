@@ -25,6 +25,9 @@ export const viewport: Viewport = {
   themeColor: "#6366f1",
 };
 
+// Force cache bust on every deploy
+export const fetchCache = "force-no-store";
+
 export default function RootLayout({
   children,
 }: Readonly<{
