@@ -21,6 +21,8 @@ export default function LogForm({ date }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("overview");
+  const [isExistingLog, setIsExistingLog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Main fields
   const [overallSeverity, setOverallSeverity] = useState<number | null>(null);
@@ -54,6 +56,7 @@ export default function LogForm({ date }: Props) {
 
         if (data && data.id) {
           // Existing log found — load it
+          setIsExistingLog(true);
           setOverallSeverity(data.overallSeverity);
           setItchLevel(data.itchLevel);
           setSleepQuality(data.sleepQuality);
@@ -153,6 +156,20 @@ export default function LogForm({ date }: Props) {
       .then(setWeather)
       .catch(() => {});
   }, []);
+
+  const deleteLog = async () => {
+    if (!confirm("確定要刪除呢條記錄？刪除之後冇得還原！")) return;
+    try {
+      const res = await fetch(`/api/logs/${date}`, { method: "DELETE" });
+      if (res.ok) {
+        window.location.href = "/timeline";
+      } else {
+        alert("刪除失敗，請重試");
+      }
+    } catch {
+      alert("網絡錯誤");
+    }
+  };
 
   const save = async () => {
     if (saving) return; // prevent double-click
@@ -282,7 +299,16 @@ export default function LogForm({ date }: Props) {
           <h1 className="text-base font-bold text-gray-800">
             {isToday ? "📝 今日記錄" : "📝 編輯記錄"}
           </h1>
-          <div className="w-16" /> {/* spacer */}
+          {isExistingLog ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-red-400 text-sm font-medium hover:text-red-600 transition-colors"
+            >
+              🗑️ 刪除
+            </button>
+          ) : (
+            <div className="w-16" />
+          )}
         </div>
         {/* Date & Weather */}
         <div className="px-4 pb-2 flex items-center justify-between">
@@ -428,6 +454,35 @@ export default function LogForm({ date }: Props) {
           />
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 mx-4 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="text-center space-y-2">
+              <span className="text-4xl">🗑️</span>
+              <h3 className="text-lg font-bold text-gray-800">確認刪除？</h3>
+              <p className="text-sm text-gray-500">
+                刪除 {formatDate(date)} 嘅記錄後，將無法恢復。
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-3 rounded-2xl border-2 border-gray-200 text-gray-500 font-medium text-sm hover:bg-gray-50 transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => { setShowDeleteConfirm(false); deleteLog(); }}
+                className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-semibold text-sm hover:bg-red-600 active:scale-[0.98] transition-all shadow-md"
+              >
+                🗑️ 確認刪除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fixed Bottom Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-gray-100 px-4 py-3">

@@ -1,9 +1,9 @@
 import { db } from "@/db";
 import { dailyLogs, affectedAreas, medications, foodEntries, triggers } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
-// GET /api/logs — list recent logs (with nested data for autofill)
+// GET /api/logs
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const withNested = searchParams.get("nested") === "true";
@@ -17,33 +17,24 @@ export async function GET(req: NextRequest) {
 
   if (withNested && logs.length > 0) {
     const logIds = logs.map((l) => l.id);
-    const { inArray } = await import("drizzle-orm");
     const allAreas = await db.select().from(affectedAreas).where(inArray(affectedAreas.logId, logIds));
     const allMeds = await db.select().from(medications).where(inArray(medications.logId, logIds));
     const allFoods = await db.select().from(foodEntries).where(inArray(foodEntries.logId, logIds));
     const allTriggers = await db.select().from(triggers).where(inArray(triggers.logId, logIds));
 
-    const areaMap = new Map<string, typeof allAreas>();
-    const medMap = new Map<string, typeof allMeds>();
-    const foodMap = new Map<string, typeof allFoods>();
-    const triggerMap = new Map<string, typeof allTriggers>();
+    const groupBy = <T extends { logId: string }>(items: T[]) => {
+      const map = new Map<string, T[]>();
+      for (const item of items) {
+        if (!map.has(item.logId)) map.set(item.logId, []);
+        map.get(item.logId)!.push(item);
+      }
+      return map;
+    };
 
-    for (const a of allAreas) {
-      if (!areaMap.has(a.logId)) areaMap.set(a.logId, []);
-      areaMap.get(a.logId)!.push(a);
-    }
-    for (const m of allMeds) {
-      if (!medMap.has(m.logId)) medMap.set(m.logId, []);
-      medMap.get(m.logId)!.push(m);
-    }
-    for (const f of allFoods) {
-      if (!foodMap.has(f.logId)) foodMap.set(f.logId, []);
-      foodMap.get(f.logId)!.push(f);
-    }
-    for (const t of allTriggers) {
-      if (!triggerMap.has(t.logId)) triggerMap.set(t.logId, []);
-      triggerMap.get(t.logId)!.push(t);
-    }
+    const areaMap = groupBy(allAreas);
+    const medMap = groupBy(allMeds);
+    const foodMap = groupBy(allFoods);
+    const triggerMap = groupBy(allTriggers);
 
     const result = logs.map((log) => ({
       ...log,
@@ -59,10 +50,12 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(logs);
 }
 
-// POST /api/logs — upsert a daily log with nested data
+// POST /api/logs
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    console.log("[API] POST /api/logs body:", JSON.stringify(body).slice(0, 2000));
+
     const {
       logDate,
       overallSeverity,
@@ -84,7 +77,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "logDate is required" }, { status: 400 });
     }
 
-    // Check if log exists for this date
+    // Helper: nullify empty strings
+    const n = (v: unknown) => (v === "" || v === undefined ? null : v);
+
+    // Upsert daily log
     const existing = await db
       .select()
       .from(dailyLogs)
@@ -92,114 +88,100 @@ export async function POST(req: NextRequest) {
 
     let logId: string;
 
+    const logData = {
+      overallSeverity: n(overallSeverity) as number | null,
+      itchLevel: n(itchLevel) as number | null,
+      sleepQuality: n(sleepQuality) as number | null,
+      stressLevel: n(stressLevel) as number | null,
+      mood: n(mood) as string | null,
+      notes: n(notes) as string | null,
+      weatherTemp: n(weatherTemp) as number | null,
+      weatherHumidity: n(weatherHumidity) as number | null,
+      weatherDesc: n(weatherDesc) as string | null,
+    };
+
     if (existing.length > 0) {
-      // Update
       logId = existing[0].id;
       await db
         .update(dailyLogs)
-        .set({
-          overallSeverity: overallSeverity ?? null,
-          itchLevel: itchLevel ?? null,
-          sleepQuality: sleepQuality ?? null,
-          stressLevel: stressLevel ?? null,
-          mood: mood ?? null,
-          notes: notes ?? null,
-          weatherTemp: weatherTemp ?? null,
-          weatherHumidity: weatherHumidity ?? null,
-          weatherDesc: weatherDesc ?? null,
-          updatedAt: new Date(),
-        })
+        .set({ ...logData, updatedAt: new Date() })
         .where(eq(dailyLogs.id, logId));
 
-      // Delete old nested data and re-insert
       await db.delete(affectedAreas).where(eq(affectedAreas.logId, logId));
       await db.delete(medications).where(eq(medications.logId, logId));
       await db.delete(foodEntries).where(eq(foodEntries.logId, logId));
       await db.delete(triggers).where(eq(triggers.logId, logId));
     } else {
-      // Insert
       const [inserted] = await db
         .insert(dailyLogs)
-        .values({
-          logDate,
-          overallSeverity: overallSeverity ?? null,
-          itchLevel: itchLevel ?? null,
-          sleepQuality: sleepQuality ?? null,
-          stressLevel: stressLevel ?? null,
-          mood: mood ?? null,
-          notes: notes ?? null,
-          weatherTemp: weatherTemp ?? null,
-          weatherHumidity: weatherHumidity ?? null,
-          weatherDesc: weatherDesc ?? null,
-        })
+        .values({ logDate, ...logData })
         .returning({ id: dailyLogs.id });
       logId = inserted.id;
     }
 
-    // Insert nested data with proper null handling
-    if (areas.length > 0) {
-      await db.insert(affectedAreas).values(
-        areas.map((a: Record<string, unknown>) => ({
-          logId,
-          bodyZone: (a.bodyZone as string) || "other",
-          subLocations: (a.subLocations as string[]) || [],
-          severity: (a.severity as number) || 5,
-          symptoms: (a.symptoms as string[]) || [],
-          oozing: (a.symptoms as string[])?.includes("oozing") ?? (a.oozing as boolean) ?? false,
-          scaling: (a.symptoms as string[])?.includes("scaling") ?? (a.scaling as boolean) ?? false,
-          redness: (a.symptoms as string[])?.includes("redness") ?? (a.redness as boolean) ?? false,
-          swelling: (a.symptoms as string[])?.includes("swelling") ?? (a.swelling as boolean) ?? false,
-          photoUrl: (a.photoUrl as string) ?? null,
-          notes: (a.notes as string) ?? null,
-        }))
-      );
-    }
-    if (meds.length > 0) {
-      await db.insert(medications).values(
-        meds.map((m: Record<string, unknown>) => ({
-          logId,
-          productName: (m.productName as string) || "未命名",
-          type: (m.type as string) || "cream",
-          bodyZones: (m.bodyZones as string[]) || [],
-          timesApplied: (m.timesApplied as number) ?? 1,
-          amount: (m.amount as string) ?? null,
-          notes: (m.notes as string) ?? null,
-        }))
-      );
-    }
-    if (foods.length > 0) {
-      await db.insert(foodEntries).values(
-        foods
-          .filter((f: Record<string, unknown>) => {
-            const items = f.items as string[];
-            return items && items.length > 0;
-          })
-          .map((f: Record<string, unknown>) => ({
-            logId,
-            mealType: (f.mealType as string) || "snack",
-            items: (f.items as string[]) || [],
-            suspectTrigger: (f.suspectTrigger as boolean) ?? false,
-            photoUrl: (f.photoUrl as string) ?? null,
-            notes: (f.notes as string) ?? null,
-          }))
-      );
-    }
-    if (triggerList.length > 0) {
-      await db.insert(triggers).values(
-        triggerList.map((t: Record<string, unknown>) => ({
-          logId,
-          triggerType: (t.triggerType as string) || "other",
-          description: (t.description as string) ?? null,
-          severity: (t.severity as number) ?? 3,
-        }))
-      );
+    // Insert areas
+    for (const a of (areas as Record<string, unknown>[])) {
+      const symptoms = (a.symptoms as string[]) || [];
+      await db.insert(affectedAreas).values({
+        logId,
+        bodyZone: (a.bodyZone as string) || "other",
+        subLocations: (a.subLocations as string[]) || [],
+        severity: (a.severity as number) || 5,
+        symptoms,
+        oozing: symptoms.includes("oozing"),
+        scaling: symptoms.includes("scaling"),
+        redness: symptoms.includes("redness"),
+        swelling: symptoms.includes("swelling"),
+        photoUrl: n(a.photoUrl) as string | null,
+        notes: n(a.notes) as string | null,
+      });
     }
 
+    // Insert meds
+    for (const m of (meds as Record<string, unknown>[])) {
+      await db.insert(medications).values({
+        logId,
+        productName: (m.productName as string) || "未命名",
+        type: (m.type as string) || "cream",
+        bodyZones: (m.bodyZones as string[]) || [],
+        timesApplied: (m.timesApplied as number) ?? 1,
+        amount: n(m.amount) as string | null,
+        notes: n(m.notes) as string | null,
+      });
+    }
+
+    // Insert foods
+    for (const f of (foods as Record<string, unknown>[])) {
+      const items = (f.items as string[]) || [];
+      if (items.length === 0) continue;
+      await db.insert(foodEntries).values({
+        logId,
+        mealType: (f.mealType as string) || "snack",
+        items,
+        suspectTrigger: (f.suspectTrigger as boolean) ?? false,
+        photoUrl: n(f.photoUrl) as string | null,
+        notes: n(f.notes) as string | null,
+      });
+    }
+
+    // Insert triggers
+    for (const t of (triggerList as Record<string, unknown>[])) {
+      await db.insert(triggers).values({
+        logId,
+        triggerType: (t.triggerType as string) || "other",
+        description: n(t.description) as string | null,
+        severity: (t.severity as number) ?? 3,
+      });
+    }
+
+    console.log("[API] Save success, logId:", logId);
     return NextResponse.json({ success: true, logId });
   } catch (error) {
-    console.error("[API /api/logs POST] Error:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    const errStack = error instanceof Error ? error.stack : "";
+    console.error("[API] POST /api/logs ERROR:", errMsg, errStack);
     return NextResponse.json(
-      { error: "Failed to save log", details: String(error) },
+      { error: "Failed to save log", details: errMsg },
       { status: 500 }
     );
   }
