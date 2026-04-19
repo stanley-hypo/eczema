@@ -3,8 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 // GET /api/weather?lat=...&lon=...
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const lat = searchParams.get("lat") || "22.3193"; // Default: Hong Kong
-  const lon = searchParams.get("lon") || "114.1694";
+  const latRaw = searchParams.get("lat") || "22.3193";
+  const lonRaw = searchParams.get("lon") || "114.1694";
+
+  // Validate lat/lon are numeric to prevent SSRF
+  const lat = parseFloat(latRaw);
+  const lon = parseFloat(lonRaw);
+  if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return NextResponse.json({ error: "Invalid coordinates" }, { status: 400 });
+  }
 
   try {
     const res = await fetch(

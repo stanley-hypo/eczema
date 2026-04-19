@@ -57,6 +57,7 @@ export const dailyLogs = pgTable(
   },
   (table) => [
     index("idx_daily_logs_date").on(table.logDate),
+    index("idx_daily_logs_user").on(table.userId),
   ]
 );
 

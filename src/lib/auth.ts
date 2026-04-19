@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { users, sessions } from "@/db/schema";
+import { users, sessions, dailyLogs } from "@/db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
@@ -78,11 +78,19 @@ export async function toggleUserActive(userId: string, isActive: boolean) {
 }
 
 export async function resetUserPassword(userId: string, newPassword: string) {
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error("Password must be at least 6 characters");
+  }
   const passwordHash = await hashPassword(newPassword);
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
 }
 
 export async function deleteUser(userId: string) {
+  // Delete user's daily logs (cascade handles nested data)
+  const userLogs = await db.select({ id: dailyLogs.id }).from(dailyLogs).where(eq(dailyLogs.userId, userId));
+  for (const log of userLogs) {
+    await db.delete(dailyLogs).where(eq(dailyLogs.id, log.id));
+  }
   await db.delete(sessions).where(eq(sessions.userId, userId));
   await db.delete(users).where(eq(users.id, userId));
 }

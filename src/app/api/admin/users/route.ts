@@ -22,12 +22,19 @@ export async function POST(req: NextRequest) {
   if (!email || !name || !password) {
     return NextResponse.json({ error: "請填寫所有欄位" }, { status: 400 });
   }
+  if (password.length < 6) {
+    return NextResponse.json({ error: "密碼至少 6 個字" }, { status: 400 });
+  }
+  if (!/\S+@\S+\.\S+/.test(email)) {
+    return NextResponse.json({ error: "Email 格式不正確" }, { status: 400 });
+  }
 
   try {
     const user = await createUser(email, name, password, role || "user");
     return NextResponse.json({ success: true, user });
-  } catch (error: any) {
-    if (error?.code === "23505") {
+  } catch (error: unknown) {
+    const pgError = error as { code?: string };
+    if (pgError?.code === "23505") {
       return NextResponse.json({ error: "此 email 已被使用" }, { status: 409 });
     }
     return NextResponse.json({ error: "建立失敗" }, { status: 500 });
