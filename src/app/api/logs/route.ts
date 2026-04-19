@@ -180,8 +180,10 @@ export async function POST(req: NextRequest) {
     const errMsg = error instanceof Error ? error.message : String(error);
     const errStack = error instanceof Error ? error.stack : "";
     console.error("[API] POST /api/logs ERROR:", errMsg, errStack);
+
+    // Return FULL details so frontend can show it
     return NextResponse.json(
-      { error: "Failed to save log", details: errMsg },
+      { error: "Failed to save log", details: errMsg, stack: errStack },
       { status: 500 }
     );
   }

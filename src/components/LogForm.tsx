@@ -240,8 +240,9 @@ export default function LogForm({ date }: Props) {
         console.error("[LogForm] Save failed:", res.status, JSON.stringify(data));
         setSaveStatus("error");
         // Show FULL error details
-        const errMsg = data.details || data.error || JSON.stringify(data);
-        alert("儲存失敗:\n" + errMsg + "\n\nStatus: " + res.status);
+        const errMsg = data.details || data.error || "Unknown error";
+        const errStack = data.stack || "";
+        alert("儲存失敗:\n\n" + errMsg + "\n\nStack:\n" + (errStack || "無") + "\n\nStatus: " + res.status + "\n\n請截圖俾我睇！");
         setTimeout(() => setSaveStatus("idle"), 5000);
       }
     } catch (err) {
