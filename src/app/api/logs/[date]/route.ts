@@ -3,6 +3,7 @@ import { dailyLogs, affectedAreas, medications, foodEntries, triggers } from "@/
 import { eq, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { verifyCsrf } from "@/lib/csrf";
 
 // GET /api/logs/[date] — get full log for a date (user-scoped)
 export async function GET(
@@ -46,6 +47,11 @@ export async function DELETE(
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // CSRF protection
+  if (!(await verifyCsrf(_req))) {
+    return NextResponse.json({ error: "CSRF token missing or invalid" }, { status: 403 });
+  }
 
   const { date } = await params;
   const userId = session.user.id;

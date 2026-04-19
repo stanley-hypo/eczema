@@ -7,6 +7,7 @@ import BodyZonePicker, { type AffectedAreaData } from "@/components/BodyZonePick
 import MedicationSection, { type MedicationData } from "@/components/MedicationSection";
 import FoodSection, { type FoodEntryData } from "@/components/FoodSection";
 import TriggerSection, { type TriggerData } from "@/components/TriggerSection";
+import { useAuth } from "@/components/AuthProvider";
 
 interface Props {
   date: string;
@@ -16,6 +17,7 @@ type SaveStatus = "idle" | "saving" | "success" | "error";
 
 export default function LogForm({ date }: Props) {
   const router = useRouter();
+  const { fetchWithCsrf } = useAuth();
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [loaded, setLoaded] = useState(false);
@@ -174,7 +176,7 @@ export default function LogForm({ date }: Props) {
   const deleteLog = async () => {
     if (!confirm("確定要刪除呢條記錄？刪除之後冇得還原！")) return;
     try {
-      const res = await fetch(`/api/logs/${date}`, { method: "DELETE" });
+      const res = await fetchWithCsrf(`/api/logs/${date}`, { method: "DELETE" });
       if (res.ok) {
         window.location.href = "/timeline";
       } else {
@@ -235,7 +237,7 @@ export default function LogForm({ date }: Props) {
 
       console.log("[LogForm] Saving payload:", JSON.stringify(payload).slice(0, 1000));
 
-      const res = await fetch("/api/logs", {
+      const res = await fetchWithCsrf("/api/logs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

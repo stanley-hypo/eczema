@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, createUser, getAllUsers, toggleUserActive, resetUserPassword, deleteUser } from "@/lib/auth";
+import { verifyCsrf } from "@/lib/csrf";
 
-// GET — list all users (admin only)
+// GET — list all users (admin only) — no CSRF needed for GET
 export async function GET() {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  if (!(await verifyCsrf(req))) {
+    return NextResponse.json({ error: "CSRF token missing or invalid" }, { status: 403 });
   }
 
   const { email, name, password, role } = await req.json();
@@ -46,6 +51,10 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  if (!(await verifyCsrf(req))) {
+    return NextResponse.json({ error: "CSRF token missing or invalid" }, { status: 403 });
   }
 
   const { userId, action, value } = await req.json();

@@ -3,6 +3,7 @@ import { dailyLogs, affectedAreas, medications, foodEntries, triggers } from "@/
 import { eq, desc, inArray, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { verifyCsrf } from "@/lib/csrf";
 
 // GET /api/logs
 export async function GET(req: NextRequest) {
@@ -60,6 +61,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // CSRF protection
+  if (!(await verifyCsrf(req))) {
+    return NextResponse.json({ error: "CSRF token missing or invalid" }, { status: 403 });
+  }
 
   const userId = session.user.id;
 

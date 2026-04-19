@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { RequireAuth, useAuth } from "@/components/AuthProvider";
-import Link from "next/link";
-
-interface UserData {
+import Link from "next/link";interface UserData {
   id: string;
   email: string;
   name: string;
@@ -15,7 +13,7 @@ interface UserData {
 }
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, fetchWithCsrf } = useAuth();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -32,7 +30,7 @@ export default function AdminPage() {
   };
 
   const loadUsers = async () => {
-    const res = await fetch("/api/admin/users");
+    const res = await fetchWithCsrf("/api/admin/users");
     if (res.status === 403) {
       window.location.href = "/";
       return;
@@ -50,7 +48,7 @@ export default function AdminPage() {
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
-    const res = await fetch("/api/admin/users", {
+    const res = await fetchWithCsrf("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: newEmail, name: newName, password: newPassword, role: newRole }),
@@ -67,7 +65,7 @@ export default function AdminPage() {
   };
 
   const toggleActive = async (userId: string, isActive: boolean) => {
-    await fetch("/api/admin/users", {
+    await fetchWithCsrf("/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, action: "toggleActive", value: !isActive }),
@@ -78,7 +76,7 @@ export default function AdminPage() {
   const resetPwd = async (userId: string, name: string) => {
     const pwd = prompt(`為 ${name} 設定新密碼：`);
     if (!pwd) return;
-    const res = await fetch("/api/admin/users", {
+    const res = await fetchWithCsrf("/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, action: "resetPassword", value: pwd }),
@@ -88,7 +86,7 @@ export default function AdminPage() {
 
   const deleteUser = async (userId: string, name: string) => {
     if (!confirm(`確定刪除用戶 ${name}？呢個動作無法還原！`)) return;
-    const res = await fetch("/api/admin/users", {
+    const res = await fetchWithCsrf("/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, action: "delete" }),

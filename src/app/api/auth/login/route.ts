@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticate, SESSION_COOKIE, SESSION_DURATION_DAYS } from "@/lib/auth";
+import { verifyCsrf } from "@/lib/csrf";
 
 // Simple in-memory rate limiter (resets on serverless cold start, but good enough)
 const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
@@ -7,6 +8,8 @@ const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 export async function POST(req: NextRequest) {
+  // CSRF check (skip for login since CSRF token may not be set yet)
+  // Login is protected by rate limiting + credentials instead
   try {
     const { email, password } = await req.json();
     if (!email || !password) {
