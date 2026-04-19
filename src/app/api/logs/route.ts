@@ -77,8 +77,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "logDate is required" }, { status: 400 });
     }
 
-    // Helper: nullify empty strings
-    const n = (v: unknown) => (v === "" || v === undefined ? null : v);
+    // Helper: nullify empty strings/undefined, and round numbers
+    const n = (v: unknown) => (v === "" || v === undefined || v === null ? null : v);
+    const nInt = (v: unknown) => {
+      if (v === "" || v === undefined || v === null) return null;
+      const num = typeof v === "number" ? v : parseFloat(String(v));
+      return isNaN(num) ? null : Math.round(num);
+    };
 
     // Upsert daily log
     const existing = await db
@@ -89,14 +94,14 @@ export async function POST(req: NextRequest) {
     let logId: string;
 
     const logData = {
-      overallSeverity: n(overallSeverity) as number | null,
-      itchLevel: n(itchLevel) as number | null,
-      sleepQuality: n(sleepQuality) as number | null,
-      stressLevel: n(stressLevel) as number | null,
+      overallSeverity: nInt(overallSeverity),
+      itchLevel: nInt(itchLevel),
+      sleepQuality: nInt(sleepQuality),
+      stressLevel: nInt(stressLevel),
       mood: n(mood) as string | null,
       notes: n(notes) as string | null,
-      weatherTemp: n(weatherTemp) as number | null,
-      weatherHumidity: n(weatherHumidity) as number | null,
+      weatherTemp: nInt(weatherTemp),
+      weatherHumidity: nInt(weatherHumidity),
       weatherDesc: n(weatherDesc) as string | null,
     };
 
@@ -126,7 +131,7 @@ export async function POST(req: NextRequest) {
         logId,
         bodyZone: (a.bodyZone as string) || "other",
         subLocations: (a.subLocations as string[]) || [],
-        severity: (a.severity as number) || 5,
+        severity: nInt(a.severity) ?? 5,
         symptoms,
         oozing: symptoms.includes("oozing"),
         scaling: symptoms.includes("scaling"),
@@ -144,7 +149,7 @@ export async function POST(req: NextRequest) {
         productName: (m.productName as string) || "未命名",
         type: (m.type as string) || "cream",
         bodyZones: (m.bodyZones as string[]) || [],
-        timesApplied: (m.timesApplied as number) ?? 1,
+        timesApplied: nInt(m.timesApplied) ?? 1,
         amount: n(m.amount) as string | null,
         notes: n(m.notes) as string | null,
       });
@@ -170,7 +175,7 @@ export async function POST(req: NextRequest) {
         logId,
         triggerType: (t.triggerType as string) || "other",
         description: n(t.description) as string | null,
-        severity: (t.severity as number) ?? 3,
+        severity: nInt(t.severity) ?? 3,
       });
     }
 
