@@ -1,10 +1,15 @@
 import { db } from "@/db";
 import { dailyLogs, affectedAreas, medications, foodEntries, triggers } from "@/db/schema";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 
 // GET /api/logs
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const userId = session.user.id;
   const { searchParams } = new URL(req.url);
   const withNested = searchParams.get("nested") === "true";
   const limit = Math.min(parseInt(searchParams.get("limit") || "90"), 365);
@@ -12,6 +17,7 @@ export async function GET(req: NextRequest) {
   const logs = await db
     .select()
     .from(dailyLogs)
+    .where(eq(dailyLogs.userId, userId))
     .orderBy(desc(dailyLogs.logDate))
     .limit(limit);
 
@@ -52,6 +58,11 @@ export async function GET(req: NextRequest) {
 
 // POST /api/logs
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const userId = session.user.id;
+
   try {
     const body = await req.json();
     console.log("[API] POST /api/logs body:", JSON.stringify(body).slice(0, 2000));
@@ -77,7 +88,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "logDate is required" }, { status: 400 });
     }
 
-    // Helper: nullify empty strings/undefined, and round numbers
     const n = (v: unknown) => (v === "" || v === undefined || v === null ? null : v);
     const nInt = (v: unknown) => {
       if (v === "" || v === undefined || v === null) return null;
@@ -85,11 +95,11 @@ export async function POST(req: NextRequest) {
       return isNaN(num) ? null : Math.round(num);
     };
 
-    // Upsert daily log
+    // Check existing for this user + date
     const existing = await db
       .select()
       .from(dailyLogs)
-      .where(eq(dailyLogs.logDate, logDate));
+      .where(and(eq(dailyLogs.userId, userId), eq(dailyLogs.logDate, logDate)));
 
     let logId: string;
 
@@ -107,24 +117,16 @@ export async function POST(req: NextRequest) {
 
     if (existing.length > 0) {
       logId = existing[0].id;
-      await db
-        .update(dailyLogs)
-        .set({ ...logData, updatedAt: new Date() })
-        .where(eq(dailyLogs.id, logId));
-
+      await db.update(dailyLogs).set({ ...logData, updatedAt: new Date() }).where(eq(dailyLogs.id, logId));
       await db.delete(affectedAreas).where(eq(affectedAreas.logId, logId));
       await db.delete(medications).where(eq(medications.logId, logId));
       await db.delete(foodEntries).where(eq(foodEntries.logId, logId));
       await db.delete(triggers).where(eq(triggers.logId, logId));
     } else {
-      const [inserted] = await db
-        .insert(dailyLogs)
-        .values({ logDate, ...logData })
-        .returning({ id: dailyLogs.id });
+      const [inserted] = await db.insert(dailyLogs).values({ userId, logDate, ...logData }).returning({ id: dailyLogs.id });
       logId = inserted.id;
     }
 
-    // Insert areas
     for (const a of (areas as Record<string, unknown>[])) {
       const symptoms = (a.symptoms as string[]) || [];
       await db.insert(affectedAreas).values({
@@ -142,7 +144,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Insert meds
     for (const m of (meds as Record<string, unknown>[])) {
       await db.insert(medications).values({
         logId,
@@ -155,7 +156,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Insert foods
     for (const f of (foods as Record<string, unknown>[])) {
       const items = (f.items as string[]) || [];
       if (items.length === 0) continue;
@@ -169,7 +169,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Insert triggers
     for (const t of (triggerList as Record<string, unknown>[])) {
       await db.insert(triggers).values({
         logId,
@@ -185,11 +184,6 @@ export async function POST(req: NextRequest) {
     const errMsg = error instanceof Error ? error.message : String(error);
     const errStack = error instanceof Error ? error.stack : "";
     console.error("[API] POST /api/logs ERROR:", errMsg, errStack);
-
-    // Return FULL details so frontend can show it
-    return NextResponse.json(
-      { error: "Failed to save log", details: errMsg, stack: errStack },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to save log", details: errMsg, stack: errStack }, { status: 500 });
   }
 }

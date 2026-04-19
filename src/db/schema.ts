@@ -11,11 +11,37 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
-// ── Daily Log (one per day) ──
+// ── Users ──
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  passwordHash: text("password_hash").notNull(),
+  role: varchar("role", { length: 20 }).notNull().default("user"), // "admin" | "user"
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+// ── Sessions ──
+export const sessions = pgTable("sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ── Daily Log (one per day per user) ──
 export const dailyLogs = pgTable(
   "daily_logs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
     logDate: date("log_date").notNull(),
     overallSeverity: integer("overall_severity"),
     itchLevel: integer("itch_level"),
@@ -93,6 +119,9 @@ export const triggers = pgTable("triggers", {
 });
 
 // Types
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
 export type DailyLog = typeof dailyLogs.$inferSelect;
 export type NewDailyLog = typeof dailyLogs.$inferInsert;
 export type AffectedArea = typeof affectedAreas.$inferSelect;

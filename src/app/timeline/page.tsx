@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useAuth, RequireAuth } from "@/components/AuthProvider";
 
 interface Log {
   id: string;
@@ -47,6 +48,7 @@ function severityTextColor(severity: number | null): string {
 }
 
 export default function TimelinePage() {
+  const { user, logout } = useAuth();
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -126,6 +128,7 @@ export default function TimelinePage() {
   }
 
   return (
+    <RequireAuth>
     <div className="max-w-lg mx-auto min-h-screen bg-gray-50">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-gray-100 px-4 pt-4 pb-3">
@@ -134,12 +137,22 @@ export default function TimelinePage() {
             <h1 className="text-2xl font-bold text-gray-900">🩺 濕疹日記</h1>
             <p className="text-xs text-gray-400 mt-0.5">追蹤你嘅濕疹變化</p>
           </div>
-          <Link
-            href={`/log/${today}`}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/log/${today}`}
             className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2.5 rounded-2xl text-sm font-semibold shadow-md hover:shadow-lg active:scale-95 transition-all"
           >
             + 記錄
           </Link>
+          </div>
+        </div>
+
+        {/* User menu */}
+        <div className="flex items-center justify-end gap-3 pb-1">
+          {user?.role === "admin" && (
+            <Link href="/admin" className="text-xs text-purple-500 hover:text-purple-700 font-medium">👑 管理</Link>
+          )}
+          <button onClick={logout} className="text-xs text-gray-400 hover:text-gray-600">登出</button>
         </div>
       </div>
 
@@ -293,5 +306,6 @@ export default function TimelinePage() {
         )}
       </div>
     </div>
+    </RequireAuth>
   );
 }
