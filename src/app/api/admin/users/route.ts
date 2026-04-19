@@ -51,16 +51,27 @@ export async function PATCH(req: NextRequest) {
   const { userId, action, value } = await req.json();
 
   if (action === "toggleActive") {
+    // Prevent admin from deactivating themselves
+    if (userId === session.user.id) {
+      return NextResponse.json({ error: "不能停用自己嘅帳號" }, { status: 400 });
+    }
     await toggleUserActive(userId, value);
     return NextResponse.json({ success: true });
   }
 
   if (action === "resetPassword") {
+    if (!value || value.length < 6) {
+      return NextResponse.json({ error: "密碼至少 6 個字" }, { status: 400 });
+    }
     await resetUserPassword(userId, value);
     return NextResponse.json({ success: true });
   }
 
   if (action === "delete") {
+    // Prevent admin from deleting themselves
+    if (userId === session.user.id) {
+      return NextResponse.json({ error: "不能刪除自己嘅帳號" }, { status: 400 });
+    }
     await deleteUser(userId);
     return NextResponse.json({ success: true });
   }

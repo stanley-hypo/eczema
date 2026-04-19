@@ -52,6 +52,13 @@ export default function LogForm({ date }: Props) {
       try {
         // First try loading today's existing log
         const res = await fetch(`/api/logs/${date}`);
+
+        // Redirect to login if not authenticated
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+
         const data = await res.json();
 
         if (data && data.id) {
@@ -96,6 +103,13 @@ export default function LogForm({ date }: Props) {
 
         // No existing log — auto-fill from most recent log
         const recentRes = await fetch("/api/logs?nested=true&limit=5");
+
+        // Redirect to login if not authenticated
+        if (recentRes.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+
         const recentLogs = await recentRes.json();
 
         if (Array.isArray(recentLogs) && recentLogs.length > 0) {

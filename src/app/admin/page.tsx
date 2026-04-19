@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { RequireAuth, useAuth } from "@/components/AuthProvider";
+import Link from "next/link";
 
 interface UserData {
   id: string;
@@ -13,6 +15,7 @@ interface UserData {
 }
 
 export default function AdminPage() {
+  const { user } = useAuth();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -30,6 +33,10 @@ export default function AdminPage() {
 
   const loadUsers = async () => {
     const res = await fetch("/api/admin/users");
+    if (res.status === 403) {
+      window.location.href = "/";
+      return;
+    }
     if (res.ok) {
       setUsers(await res.json());
     } else {
